@@ -493,14 +493,39 @@ class ContentAnalyzer:
                 return "unknown"
 
     def extract_category_content(self, content: str, category: str) -> str:
-        """Extract relevant text content for a specific category using basic text matching"""
-        sentences = re.split(r'[.!?]+', content)
-        category_lower = category.lower()
+        """Extract content using synonyms for better accuracy."""
+        import re
+        CATEGORY_KEYWORDS = {
+            "About Us": ["about us", "who we are", "our mission", "our story", "what we do", "company overview"],
+            "Products & Services": ["products", "services", "what we offer", "solutions", "offerings"],
+            "Team": ["our team", "meet the team", "leadership", "our people", "team members", "staff"],
+            "Blog/Press": ["blog", "press", "news", "press release", "latest articles", "media"],
+            "Contact": ["contact", "get in touch", "reach us", "contact us", "support email", "call us"],
+            "Careers": ["careers", "jobs", "we're hiring", "join our team", "work with us", "open positions"],
+            "Privacy Policy": ["privacy policy", "your privacy", "data protection", "data privacy", "information policy"],
+            "Terms of Service": ["terms of service", "terms and conditions", "legal", "user agreement", "website terms"],
+            "FAQ": ["faq", "frequently asked questions", "common questions", "help center", "questions and answers"],
+            "Support": ["support", "help", "customer service", "assistance", "technical support"],
+            "Documentation": ["documentation", "docs", "developer guide", "user manual", "api reference", "product manual"],
+            "Pricing": ["pricing", "plans", "cost", "subscription", "fees", "payment options"],
+            "News": ["news", "latest news", "company updates", "press", "announcements"],
+            "Events": ["events", "upcoming events", "webinars", "conferences", "meetups", "workshops"],
+            "Resources": ["resources", "downloads", "ebooks", "whitepapers", "tools", "guides"],
+            "Portfolio": ["portfolio", "our work", "projects", "case studies", "examples"],
+            "Case Studies": ["case studies", "customer stories", "success stories", "client stories"],
+            "Testimonials": ["testimonials", "reviews", "what our customers say", "feedback", "client testimonials"],
+            "Partners": ["partners", "partnerships", "affiliates", "collaborators", "alliances"],
+            "Investors": ["investors", "investor relations", "shareholders", "financial reports", "stock info"]
+        }
 
+        keywords = CATEGORY_KEYWORDS.get(category, [category.lower()])
+
+        sentences = re.split(r'[.!?]+', content)
         relevant_sentences = []
+
         for sentence in sentences:
             sentence_lower = sentence.lower()
-            if category_lower in sentence_lower:
+            if any(keyword in sentence_lower for keyword in keywords):
                 relevant_sentences.append(sentence.strip())
 
         if relevant_sentences:
