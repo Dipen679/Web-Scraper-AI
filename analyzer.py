@@ -390,7 +390,6 @@ class ContentAnalyzer:
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "quota" in error_str.lower():
-                # Extract retry delay if available
                 retry_delay = None
                 if "retry_delay" in error_str:
                     try:
@@ -498,7 +497,6 @@ class ContentAnalyzer:
         sentences = re.split(r'[.!?]+', content)
         category_lower = category.lower()
 
-        # Look for sentences that might contain relevant content
         relevant_sentences = []
         for sentence in sentences:
             sentence_lower = sentence.lower()
@@ -514,7 +512,6 @@ class ContentAnalyzer:
         category_lower = category.lower().replace(' & ', '-').replace(' ', '-')
         relevant_links = []
 
-        # Simple keyword matching for common categories
         url_keywords = {
             'about-us': ['about', 'company', 'story'],
             'products-&-services': ['product', 'service', 'solution'],
