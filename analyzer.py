@@ -230,9 +230,17 @@ class ContentAnalyzer:
 
             html_content = await page.content()
 
-            cleaned_content = self.extract_main_content(
-                html_content, final_url)
+            # Extract cleaned content and internal links
+            cleaned_content = self.extract_main_content(html_content, final_url)
             internal_links = await self.extract_internal_links(page, final_url)
+
+            # Clean content (removing unnecessary white spaces, invalid or empty content)
+            cleaned_content = cleaned_content.strip()
+            if not cleaned_content:  # Skip if content is empty or just whitespace
+                cleaned_content = ""
+
+            # Filter empty links
+            internal_links = [link for link in internal_links if link.strip()]
 
             logger.info(f"Successfully scraped content from {url}")
             return final_url, cleaned_content, internal_links
@@ -246,6 +254,8 @@ class ContentAnalyzer:
                     await page.close()
                 except Exception as e:
                     logger.warning(f"Error closing page: {e}")
+
+
 
     def extract_main_content(self, html: str, base_url: str) -> str:
         """Extract main readable content from HTML"""
@@ -432,7 +442,7 @@ class ContentAnalyzer:
             - **news**: News outlets, newspapers, magazines, current events sites
             - **blog**: Personal blogs, opinion sites, lifestyle blogs, individual content creators
             - **e-commerce**: Online stores, shopping sites, product catalogs with purchase functionality
-            - **company**: Corporate websites, business homepages, company information sites
+            - **company**: Corporate websites, business homepages, company information sites, cloud services
             - **government**: Official government sites, public services, regulatory agencies
             - **social media**: Social networks, community platforms, user-generated content hubs
             - **forum**: Discussion boards, Q&A sites, community forums
@@ -440,11 +450,10 @@ class ContentAnalyzer:
             - **non-profit**: Charitable organizations, foundations, advocacy groups
             
             ANALYSIS CRITERIA:
-            1. DO NOT refer any site as "company". ALWAYS use ONLY the classifications listed above - no other categories are permitted
-            2. Look for key indicators in the content (course listings, medical terms, research papers, product catalogs, etc.)
-            3. Consider the site's primary function and target audience
-            4. If multiple types apply, choose the most dominant/primary purpose
-            5. Pay attention to domain patterns (.edu, .gov, .org) but prioritize content over domain
+            1. Look for key indicators in the content (course listings, medical terms, research papers, product catalogs, etc.)
+            2. Consider the site's primary function and target audience
+            3. If multiple types apply, choose the most dominant/primary purpose
+            4. Pay attention to domain patterns (.edu, .gov, .org) but prioritize content over domain
             
             EXAMPLES:
             - Coursera → educational (online courses and certifications)
@@ -493,44 +502,20 @@ class ContentAnalyzer:
                 return "unknown"
 
     def extract_category_content(self, content: str, category: str) -> str:
-        """Extract content using synonyms for better accuracy."""
-        import re
-        CATEGORY_KEYWORDS = {
-            "About Us": ["about us", "who we are", "our mission", "our story", "what we do", "company overview"],
-            "Products & Services": ["products", "services", "what we offer", "solutions", "offerings"],
-            "Team": ["our team", "meet the team", "leadership", "our people", "team members", "staff"],
-            "Blog/Press": ["blog", "press", "news", "press release", "latest articles", "media"],
-            "Contact": ["contact", "get in touch", "reach us", "contact us", "support email", "call us"],
-            "Careers": ["careers", "jobs", "we're hiring", "join our team", "work with us", "open positions"],
-            "Privacy Policy": ["privacy policy", "your privacy", "data protection", "data privacy", "information policy"],
-            "Terms of Service": ["terms of service", "terms and conditions", "legal", "user agreement", "website terms"],
-            "FAQ": ["faq", "frequently asked questions", "common questions", "help center", "questions and answers"],
-            "Support": ["support", "help", "customer service", "assistance", "technical support"],
-            "Documentation": ["documentation", "docs", "developer guide", "user manual", "api reference", "product manual"],
-            "Pricing": ["pricing", "plans", "cost", "subscription", "fees", "payment options"],
-            "News": ["news", "latest news", "company updates", "press", "announcements"],
-            "Events": ["events", "upcoming events", "webinars", "conferences", "meetups", "workshops"],
-            "Resources": ["resources", "downloads", "ebooks", "whitepapers", "tools", "guides"],
-            "Portfolio": ["portfolio", "our work", "projects", "case studies", "examples"],
-            "Case Studies": ["case studies", "customer stories", "success stories", "client stories"],
-            "Testimonials": ["testimonials", "reviews", "what our customers say", "feedback", "client testimonials"],
-            "Partners": ["partners", "partnerships", "affiliates", "collaborators", "alliances"],
-            "Investors": ["investors", "investor relations", "shareholders", "financial reports", "stock info"]
-        }
-
-        keywords = CATEGORY_KEYWORDS.get(category, [category.lower()])
-
+        """Extract relevant text content for a specific category using basic text matching"""
         sentences = re.split(r'[.!?]+', content)
-        relevant_sentences = []
+        category_lower = category.lower()
 
+        relevant_sentences = []
         for sentence in sentences:
             sentence_lower = sentence.lower()
-            if any(keyword in sentence_lower for keyword in keywords):
+            if category_lower in sentence_lower:
                 relevant_sentences.append(sentence.strip())
 
         if relevant_sentences:
             return '. '.join(relevant_sentences[:3]) + '.'
-        return ""
+        return ""  # Return empty string if no relevant sentences
+
 
     def match_links_to_category(self, links: List[str], category: str) -> List[str]:
         """Match internal links to categories using basic URL pattern matching"""
@@ -590,17 +575,19 @@ class ContentAnalyzer:
             for category_info in categories:
                 category_name = category_info.get('category_name', '')
                 if category_name:
-                    category_text = self.extract_category_content(
-                        content, category_name)
-                    category_links = self.match_links_to_category(
-                        internal_links, category_name)
+                    # Extract text and links for the category
+                    category_text = self.extract_category_content(content, category_name)
+                    category_links = self.match_links_to_category(internal_links, category_name)
 
-                    processed_content.append({
-                        category_name: {
-                            "links": category_links,
-                            "text": category_text
-                        }
-                    })
+                    # Check if either links or text are not empty and if both are empty, skip the category
+                    if category_text.strip() and category_links:
+                        # Append only valid categories with content
+                        processed_content.append({
+                            category_name: {
+                                "links": category_links,
+                                "text": category_text
+                            }
+                        })
 
             return AnalysisResult(
                 url=final_url,
@@ -630,27 +617,39 @@ class ContentAnalyzer:
             for i, url in enumerate(urls):
                 logger.info(f"Processing URL {i+1}/{len(urls)}: {url}")
 
-                result = await self.analyze_url(url)
+                try:
+                    # Analyze the URL and ensure the result is valid
+                    result = await self.analyze_url(url)
 
-                result_dict = {
-                    "URL": result.url,
-                    "site_type": result.site_type,
-                    "extracted_web_content": result.extracted_web_content,
-                    "content": result.content,
-                    "errors": result.errors
-                }
+                    # Only append the result if there's valid content
+                    if result.content:
+                        result_dict = {
+                            "URL": result.url,
+                            "site_type": result.site_type,
+                            "extracted_web_content": result.extracted_web_content,
+                            "content": result.content,
+                            "errors": result.errors
+                        }
+                        results.append(result_dict)
+                    else:
+                        logger.info(f"No valid content found for {url}. Skipping...")
 
-                results.append(result_dict)
+                except Exception as e:
+                    # Log the error for a specific URL but continue processing others
+                    logger.error(f"Error analyzing {url}: {e}")
 
+                # Optional: Adding a sleep to avoid rate-limiting issues or API overload
                 if i < len(urls) - 1:
                     await asyncio.sleep(3)
 
         except Exception as e:
             logger.error(f"Error during analysis: {e}")
         finally:
+            # Always ensure the browser is closed after processing
             await self.close_browser()
 
         return results
+
 
 
 def load_urls_from_file(filepath: str) -> List[str]:
@@ -693,22 +692,24 @@ async def main():
     args = parser.parse_args()
 
     default_urls = [
-        # News and Magazine Sites
+        # # News and Magazine Sites
         "https://www.bbc.com/news",
         "https://www.theguardian.com",
 
-        # Educational and Reference Sites
+        # # Educational and Reference Sites
         "https://www.coursera.org",
 
-        # Technology and Development Blogs
+        # # Technology and Development Blogs
         "https://medium.com",
 
-        # Popular Content-Rich Blogs
+        # # Popular Content-Rich Blogs
         "https://www.searchenginejournal.com",
 
-        # Health & Medical
+        # # Health & Medical
         "https://www.medicalnewstoday.com",
-        "https://pubmed.ncbi.nlm.nih.gov",
+
+        "https://aws.amazon.com/",
+        "https://cloud.google.com/",
     ]
 
     if args.file:
